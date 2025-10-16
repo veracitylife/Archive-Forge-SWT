@@ -1,0 +1,6 @@
+# Guardrails to prevent agent loops
+- Never perform more than ONE tool invocation per user request.
+- Do not auto-retry failed steps.
+- Prefer proposing a diff over applying changes automatically.
+- If uncertain, ask ONE question and STOP.
+- Avoid vague goals; each request must specify exact files or functions when possible.

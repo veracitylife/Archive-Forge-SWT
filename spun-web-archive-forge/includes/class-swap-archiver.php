@@ -32,29 +32,16 @@ class SWP_Archiver {
     public function get_save_status( $job_id ) {
         $url = sprintf('https://web.archive.org/save/status/%s?_t=%d', rawurlencode($job_id), time());
         $res = wp_remote_get( $url, [
-            'timeout' => 30, // Increased timeout
+            'timeout' => 15,
             'headers' => [ 'Accept' => 'application/json' ],
-            'sslverify' => true,
-            'user-agent' => 'WordPress/' . get_bloginfo('version') . '; ' . home_url(),
         ]);
-        
-        if ( is_wp_error( $res ) ) {
-            // Log the error for debugging
-            error_log('SWP_Archiver: Save status error for job ' . $job_id . ': ' . $res->get_error_message());
-            return $res;
-        }
+        if ( is_wp_error( $res ) ) return $res;
 
         $code = wp_remote_retrieve_response_code( $res );
         $body = wp_remote_retrieve_body( $res );
-        
-        if ( $code !== 200 ) {
-            error_log('SWP_Archiver: Non-200 response for job ' . $job_id . ': ' . $code);
-            return new WP_Error('wayback_http_code', 'Non-200 from Save status: '.$code);
-        }
-        
+        if ( $code !== 200 ) return new WP_Error('wayback_http_code', 'Non-200 from Save status: '.$code);
         $json = json_decode( $body, true );
         if ( !is_array($json) || empty($json['status']) ) {
-            error_log('SWP_Archiver: Malformed JSON for job ' . $job_id . ': ' . $body);
             return new WP_Error('wayback_bad_json', 'Malformed status JSON');
         }
         return $json;
@@ -66,24 +53,11 @@ class SWP_Archiver {
      */
     public function check_availability( $original_url ) {
         $endpoint = add_query_arg( 'url', rawurlencode( $original_url ), 'https://archive.org/wayback/available' );
-        $res = wp_remote_get( $endpoint, [ 
-            'timeout' => 30, // Increased timeout
-            'headers' => [ 'Accept' => 'application/json' ],
-            'sslverify' => true,
-            'user-agent' => 'WordPress/' . get_bloginfo('version') . '; ' . home_url(),
-        ] );
-        
-        if ( is_wp_error($res) ) {
-            error_log('SWP_Archiver: Availability check error for ' . $original_url . ': ' . $res->get_error_message());
-            return $res;
-        }
+        $res = wp_remote_get( $endpoint, [ 'timeout' => 15, 'headers' => [ 'Accept' => 'application/json' ] ] );
+        if ( is_wp_error($res) ) return $res;
 
         $code = wp_remote_retrieve_response_code( $res );
-        if ( $code !== 200 ) {
-            error_log('SWP_Archiver: Availability non-200 for ' . $original_url . ': ' . $code);
-            return new WP_Error('wayback_http_code', 'Availability non-200: '.$code);
-        }
-        
+        if ( $code !== 200 ) return new WP_Error('wayback_http_code', 'Availability non-200: '.$code);
         $json = json_decode( wp_remote_retrieve_body($res), true );
         return $json['archived_snapshots']['closest'] ?? null;
     }
@@ -212,30 +186,11 @@ class SWP_Archiver {
         );
 
         $results = [];
-        $processed_count = 0;
-        
         if ( $rows ) {
             foreach ( $rows as $row ) {
-                try {
-                    $result = $this->reconcile_submission( $row );
-                    $results[$row->id] = $result;
-                    $processed_count++;
-                    
-                    // Add small delay to prevent API rate limiting
-                    if ($processed_count % 10 === 0) {
-                        sleep(1);
-                    }
-                    
-                } catch (Exception $e) {
-                    error_log('SWP_Archiver: Error processing submission ' . $row->id . ': ' . $e->getMessage());
-                    $results[$row->id] = 'error: ' . $e->getMessage();
-                }
+                $results[$row->id] = $this->reconcile_submission( $row );
             }
         }
-        
-        // Log summary
-        error_log('SWP_Archiver: Processed ' . $processed_count . ' stuck items');
-        
         return $results;
     }
     

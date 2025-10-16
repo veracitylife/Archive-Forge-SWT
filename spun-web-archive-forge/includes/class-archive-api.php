@@ -409,15 +409,6 @@ class SWAP_Archive_API {
             );
         }
         
-        // Skip localhost and development URLs (improvement from MickeyKay project)
-        if ($this->is_local_url($url)) {
-            return array(
-                'success' => false,
-                'error' => __('Cannot archive localhost or development URLs.', 'spun-web-archive-forge'),
-                'error_type' => 'local_url'
-            );
-        }
-        
         // Try authenticated submission first if credentials are available
         if (!empty($this->api_key) && !empty($this->api_secret)) {
             $result = $this->submit_authenticated($url, $options);
@@ -428,39 +419,6 @@ class SWAP_Archive_API {
         
         // Fallback to simple submission
         return $this->submit_simple($url, $options);
-    }
-    
-    /**
-     * Check if URL is localhost or development URL
-     * 
-     * @since 1.0.15
-     * @param string $url URL to check
-     * @return bool True if local URL
-     */
-    private function is_local_url($url) {
-        $parsed_url = parse_url($url);
-        $host = $parsed_url['host'] ?? '';
-        
-        // Check for localhost patterns
-        $local_patterns = array(
-            'localhost',
-            '127.0.0.1',
-            '::1',
-            '.local',
-            '.dev',
-            '.test',
-            '192.168.',
-            '10.0.',
-            '172.16.'
-        );
-        
-        foreach ($local_patterns as $pattern) {
-            if (strpos($host, $pattern) !== false) {
-                return true;
-            }
-        }
-        
-        return false;
     }
     
     /**

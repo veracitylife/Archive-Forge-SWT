@@ -173,7 +173,7 @@
                 type: 'POST',
                 data: {
                     action: 'swap_validate_now',
-                    _ajax_nonce: swapAdmin.validateNonce
+                    _ajax_nonce: swapAdmin.nonce
                 },
                 success: function(response) {
                     console.log('SWAP Admin JS: Validation response:', response);

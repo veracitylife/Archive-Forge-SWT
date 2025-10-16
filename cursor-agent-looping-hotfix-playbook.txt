@@ -1,0 +1,126 @@
+CURSOR AGENT LOOPING — HOTFIX PLAYBOOK (Upload this .txt into Cursor and paste as needed)
+Author: ChatGPT for Ryan "Dickie" Thompson
+Date: 2025-10-16 11:44 
+
+ERROR
+- Message: "Unrecoverable agent model looping detected"
+- Meaning: Cursor aborted because the agent kept re-planning/calling tools in a loop.
+
+GOAL
+- Stop the loop immediately and complete your change with safe, one-shot prompts.
+- Add lightweight guardrails (.cursorrules) to prevent repeats.
+
+====================================================
+A) FAST FIX — 60-SECOND WORKFLOW
+====================================================
+1) Start a NEW chat in Cursor (fresh context).
+2) Turn OFF Auto-Apply / Auto-Fix for this run.
+3) Paste ONE of the "one-shot" prompts below (A or B). Avoid phrasing like "keep going", "iterate until done", "never stop".
+4) If the agent asks a question, answer ONCE. If it loops again, switch to the Propose-Diff path (Prompt A).
+
+====================================================
+B) ONE-SHOT PROMPTS (copy/paste into Cursor)
+====================================================
+B1) PROPOSE-DIFF-ONLY (zero risk of tool loops)
+--- begin ---
+You are in ONE-SHOT mode. Do not call tools more than once.
+
+Goal: <state the exact change you need in 1–2 sentences>
+
+Output: a SINGLE unified diff patch ONLY.
+If you need information, reply with exactly:
+NEEDS_ANSWER: <one concise question>
+
+Stop after producing either the diff or NEEDS_ANSWER. Do not retry or re-plan.
+--- end ---
+
+B2) GUARDED APPLY (apply only once if you really need it)
+--- begin ---
+Apply exactly ONE edit across at most TWO files. No retries, no follow-up tool calls.
+
+If the edit cannot be applied as requested, respond with:
+CANNOT_APPLY: <why> and STOP.
+
+Otherwise output the applied diff ONLY.
+--- end ---
+
+B3) SMALL-SCOPE REFACTOR (multi-file, but bounded)
+--- begin ---
+Perform a bounded refactor:
+- Touch at most THREE files.
+- Perform at most ONE tool invocation.
+- If uncertain, ask ONE question and STOP.
+
+Output: a unified diff covering all changes.
+--- end ---
+
+====================================================
+C) MINIMAL .CURSORRULES (guardrails to prevent loops)
+====================================================
+Create a file named .cursorrules at the repo root with this content:
+
+--- .cursorrules ---
+# Guardrails to prevent agent loops
+- Never perform more than ONE tool invocation per user request.
+- Do not auto-retry failed steps.
+- Prefer proposing a diff over applying changes automatically.
+- If uncertain, ask ONE question and STOP.
+- Avoid vague goals; each request must specify exact files or functions when possible.
+--------------------
+
+Tip: You can temporarily rename or remove any existing .cursorrules if they contain "keep trying" or "never stop" guidance.
+
+====================================================
+D) WORKSPACE HYGIENE (reduces loop risk)
+====================================================
+- Disable other AI extensions during the run (Copilot Chat, Codeium, Supermaven, Tabnine).
+- Trim context: close giant files, deselect large folders, or paste only the snippet.
+- Avoid long "do everything" tasks. Split into two steps: (1) produce the diff, (2) apply/review.
+- Remove "retry until success" wording from project rules / templates.
+
+====================================================
+E) TRIAGE IF IT STILL LOOPS (2–5 minutes)
+====================================================
+- Open DevTools (Help → Toggle Developer Tools) → Network.
+  If you see repeated StreamUnifiedChatRequestWithTools calls with similar payloads, it's a loop.
+- Check for failing apply step: the agent may keep proposing an edit to a file that doesn't exist or is read-only.
+  • Create the missing file or fix the path, then re-run.
+- Try in a tiny throwaway repo with only the target file. If it works there, the loop is caused by big context or repo rules.
+- Update Cursor to the latest build and retry with the one-shot prompts.
+
+====================================================
+F) SAFE "TWO-PASS" FLOW (copy/paste macros)
+====================================================
+Pass 1 — Propose Diff:
+--- begin ---
+ONE-SHOT diff proposal:
+Goal: <clear target>
+Output: unified diff only. Do not apply. Do not re-plan.
+--- end ---
+
+Review the diff. If good, run Pass 2.
+
+Pass 2 — Apply Exactly That Diff:
+--- begin ---
+Apply exactly the previously approved unified diff. 
+If any hunk fails to apply, respond with:
+CANNOT_APPLY: <file + reason> and STOP.
+--- end ---
+
+====================================================
+G) TELLTALE PHRASES TO AVOID (these cause loops)
+====================================================
+- "Keep trying until it works", "iterate until done", "continue indefinitely", "never stop", "exhaustive", "try all options".
+- Huge multi-goal briefs in one message (plan → refactor → test → fix → retest → docs). Split into discrete steps instead.
+
+====================================================
+H) QUICK CHECKLIST
+====================================================
+[ ] New chat, auto-apply OFF
+[ ] Use ONE-SHOT prompt (B1 or B2)
+[ ] If question → answer ONCE, else propose diff
+[ ] No success? Add .cursorrules from Section C
+[ ] Trim context / disable other AI plugins
+[ ] Retry with Pass 1 / Pass 2 flow
+
+END OF FILE

@@ -1,0 +1,18 @@
+parameters:
+    level: 8
+    paths:
+        - spun-web-archive-forge.php
+        - includes/
+    excludePaths:
+        - .wordpress-stubs.php
+        - vendor/
+    bootstrapFiles:
+        - .wordpress-stubs.php
+    ignoreErrors:
+        - '#Function [a-zA-Z_]+\(\) not found#'
+        - '#Constant [A-Z_]+ not found#'
+        - '#Call to function [a-zA-Z_]+ with incorrect case#'
+    checkMissingIterableValueType: false
+    checkGenericClassInNonGenericObjectType: false
+    reportUnmatchedIgnoredErrors: false
+    treatPhpDocTypesAsCertain: false

@@ -3,7 +3,7 @@
  * Plugin Name: ARCHIVE FORGE SWT
  * Plugin URI: https://spunwebtechnology.com/spun-web-archive-pro-wordpress-wayback-archive/
  * Description: Professional WordPress plugin for automatically submitting content to the Internet Archive (Wayback Machine). Includes individual post submission, auto submission, and advanced archiving tools. Compatible with PHP 7.4-8.1+.
- * Version: 1.0.17
+ * Version: 1.0.15
  * Author: Spun Web Technology
  * Author URI: https://spunwebtechnology.com/spun-web-archive-pro-wordpress-wayback-archive/
  * License: GPL v2 or later
@@ -22,22 +22,6 @@
  * @copyright 2024 Spun Web Technology
  * @license GPL-2.0-or-later
  * @since 0.0.1
- *
- * Plugin Evolution Documentation:
- * - README.md: Complete plugin overview and evolution summary
- * - CHANGELOG.md: Detailed changelog with development phases
- * - PLUGIN-EVOLUTION-DOCUMENTATION.md: Comprehensive evolution documentation
- * - COMPLETE-VERSION-HISTORY.md: Complete version history from v0.0.1 to v1.0.14
- * - DEVELOPER-README.md: Developer-focused evolution and technical details
- *
- * Development Phases:
- * 1. Foundation Phase (v0.0.1 - v0.1.x): Core functionality and basic API integration
- * 2. Feature Expansion Phase (v0.2.x): Advanced tracking, submission methods, and UI improvements
- * 3. Stability Phase (v0.3.x): Security hardening, compatibility improvements, and documentation
- * 4. Production Phase (v1.0.x): Mature, stable solution with advanced error handling and reliability
- *
- * Current Status: Production-ready with v1.0.14 featuring major stuck processing fixes
- * and enhanced reliability for enterprise environments.
  */
 
 // Prevent direct access
@@ -113,7 +97,7 @@ if (version_compare(PHP_VERSION, '7.4', '<')) {
 }
 
 // Define plugin constants
-define('SWAP_VERSION', '1.0.17');
+define('SWAP_VERSION', '1.0.15');
 define('SWAP_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SWAP_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SWAP_PLUGIN_FILE', __FILE__);
@@ -294,19 +278,12 @@ class SpunWebArchiveForge {
     
 
     
-     /**
-      * Memory dashboard instance
-      * 
-      * @var SWAP_Memory_Dashboard|null
-      */
-     private $memory_dashboard;
-     
-     /**
-      * Admin bar instance
-      * 
-      * @var SWAP_Admin_Bar|null
-      */
-     private $admin_bar;
+    /**
+     * Memory dashboard instance
+     * 
+     * @var SWAP_Memory_Dashboard|null
+     */
+    private $memory_dashboard;
     
     /**
      * Get single instance of the plugin
@@ -403,15 +380,10 @@ class SpunWebArchiveForge {
             'class-archive-links-widget.php', // Archive links widget
             'class-shortcode-handler.php',    // Shortcode handler
             'class-footer-display.php',       // Footer display
-             'class-submissions-history.php',  // Submissions history
-             'class-admin-bar.php',            // Admin bar integration
-             'class-enhanced-queue.php',       // Enhanced queue management
-             'class-submission-verifier.php',  // Submission verification
-             'class-network-manager.php',     // Network connectivity
-             'class-error-recovery.php',       // Error recovery system
-             'class-uninstall-page.php',       // Uninstall interface
-             'class-swap-archiver.php'         // Wayback validation system
-          );
+            'class-submissions-history.php',  // Submissions history
+            'class-swap-archiver.php',        // Wayback validation system
+            'class-uninstall-page.php'        // Uninstall interface
+        );
         
         // Load each dependency with error handling
         foreach ($dependencies as $file) {
@@ -563,16 +535,8 @@ class SpunWebArchiveForge {
                 'class' => 'SWAP_Shortcode_Handler',
                 'args' => array()
             ),
-             'memory_dashboard' => array(
-                 'class' => 'SWAP_Memory_Dashboard',
-                 'args' => array()
-             ),
-             'admin_bar' => array(
-                 'class' => 'SWAP_Admin_Bar',
-                 'args' => array($this->archive_api)
-             ),
-            'archiver' => array(
-                'class' => 'SWP_Archiver',
+            'memory_dashboard' => array(
+                'class' => 'SWAP_Memory_Dashboard',
                 'args' => array()
             )
         );
@@ -1280,19 +1244,10 @@ register_deactivation_hook( __FILE__, function(){
     }
 });
 
-// Enhanced cron callback for archive validation with better error handling
+// Cron callback for archive validation
 add_action('swap_validate_archives_cron', function(){
-    try {
-        if (class_exists('SWP_Archiver')) {
-            $archiver = new SWP_Archiver();
-            $result = $archiver->sweep_stuck_processing( 15, 50 );
-            
-            // Log successful cron execution
-            error_log('SWP_Archiver: Cron job executed successfully, processed ' . count($result) . ' items');
-        } else {
-            error_log('SWP_Archiver: Cron job failed - SWP_Archiver class not found');
-        }
-    } catch (Exception $e) {
-        error_log('SWP_Archiver: Cron job error - ' . $e->getMessage());
+    if (class_exists('SWP_Archiver')) {
+        $archiver = new SWP_Archiver();
+        $archiver->sweep_stuck_processing( 15, 50 );
     }
 });

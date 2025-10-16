@@ -1,0 +1,458 @@
+SWT Archive Forge — Wayback Validation Patch
+============================================
+
+Purpose
+-------
+This patch promotes submitted URLs from **Processing** to **Archived** (or **Failed**) reliably by:
+1) Capturing and storing the Save Page Now **job id**.
+2) Polling `/save/status/<JOB_ID>` until a terminal state.
+3) Second-sourcing with **Availability API** (and optional CDX) before marking as Archived.
+4) Adding a cron "unstick" sweep and an **Admin → Validate now** button.
+5) Providing minimal, drop-in code that doesn't break existing behavior.
+
+How to use this file in Cursor
+------------------------------
+1) Open your plugin project in Cursor.
+2) Paste this entire file into a new tab, select all, and run "Apply to project" (or tell Cursor: *"Apply all code additions and edits from the instructions below."*).
+3) If Cursor asks for confirmation on file paths, accept or adjust paths to match your plugin's structure.
+4) After changes, run your site locally and test from WP Admin.
+
+File / Structure Assumptions
+----------------------------
+- Plugin main file: `spun-web-archive-forge.php`  (adjust if your main file differs)
+- New service class: `includes/class-swap-archiver.php`
+- Admin UI file (if you already have one): `includes/class-admin-page.php` (we'll safely add hooks; if the file doesn't exist, Cursor will create it)
+- Submissions table: `${$wpdb->prefix}swap_submissions` with columns:
+  - id (int, pk), original_url (text/varchar), job_id (varchar), status (varchar: queued|processing|archived|failed),
+    submitted_at (datetime), snapshot_url (text), snapshot_ts (varchar 14), error_code (varchar), needs_audit (tinyint), updated_at (datetime)
+
+If your table name or columns differ, Cursor will highlight the diffs—adjust the names where noted.
+
+------------------------------------------------------------------
+1) Add the Archiver Service
+------------------------------------------------------------------
+
+Create: `includes/class-swap-archiver.php`
+
+<?php
+defined('ABSPATH') || exit;
+
+class SWP_Archiver {
+    /** @var wpdb */
+    protected $db;
+    /** @var string */
+    protected $table;
+
+    public function __construct( $wpdb = null ) {
+        global $wpdb as $wpdb_global;
+        $this->db    = $wpdb ?: $wpdb_global;
+        $this->table = $this->db->prefix . 'swap_submissions'; // <— Adjust if your table name differs
+    }
+
+    /* ==== Low-level Wayback helpers ===================================== */
+
+    /**
+     * Extract Save Page Now job id from HTML containing spn.watchJob("JOB_ID", ...)
+     */
+    public function extract_job_id( $html ) {
+        if ( preg_match('/spn\.watchJob\("([^"]+)"/', $html, $m ) ) {
+            return $m[1];
+        }
+        return null;
+    }
+
+    /**
+     * Poll Save Page Now job status.
+     * Returns array|WP_Error.
+     */
+    public function get_save_status( $job_id ) {
+        $url = sprintf('https://web.archive.org/save/status/%s?_t=%d', rawurlencode($job_id), time());
+        $res = wp_remote_get( $url, [
+            'timeout' => 15,
+            'headers' => [ 'Accept' => 'application/json' ],
+        ]);
+        if ( is_wp_error( $res ) ) return $res;
+
+        $code = wp_remote_retrieve_response_code( $res );
+        $body = wp_remote_retrieve_body( $res );
+        if ( $code !== 200 ) return new WP_Error('wayback_http_code', 'Non-200 from Save status: '.$code);
+        $json = json_decode( $body, true );
+        if ( !is_array($json) || empty($json['status']) ) {
+            return new WP_Error('wayback_bad_json', 'Malformed status JSON');
+        }
+        return $json;
+    }
+
+    /**
+     * Availability API confirmation.
+     * Returns closest snapshot array or null|WP_Error.
+     */
+    public function check_availability( $original_url ) {
+        $endpoint = add_query_arg( 'url', rawurlencode( $original_url ), 'https://archive.org/wayback/available' );
+        $res = wp_remote_get( $endpoint, [ 'timeout' => 15, 'headers' => [ 'Accept' => 'application/json' ] ] );
+        if ( is_wp_error($res) ) return $res;
+
+        $code = wp_remote_retrieve_response_code( $res );
+        if ( $code !== 200 ) return new WP_Error('wayback_http_code', 'Availability non-200: '.$code);
+        $json = json_decode( wp_remote_retrieve_body($res), true );
+        return $json['archived_snapshots']['closest'] ?? null;
+    }
+
+    /**
+     * Optional: HEAD the snapshot to ensure it's actually retrievable.
+     */
+    public function head_snapshot( $snapshot_url ) {
+        $res = wp_remote_head( $snapshot_url, [ 'timeout' => 15 ] );
+        if ( is_wp_error($res) ) return $res;
+        return wp_remote_retrieve_response_code( $res );
+    }
+
+    /* ==== Persistence helpers ========================================== */
+
+    public function mark_archived( $id, $snapshot_url, $timestamp, $args = [] ) {
+        $needs_audit = !empty($args['needs_audit']) ? 1 : 0;
+        return $this->db->update(
+            $this->table,
+            [
+                'status'       => 'archived',
+                'snapshot_url' => $snapshot_url,
+                'snapshot_ts'  => $timestamp,
+                'needs_audit'  => $needs_audit,
+                'updated_at'   => current_time('mysql'),
+            ],
+            ['id' => (int) $id],
+            ['%s','%s','%s','%d','%s'],
+            ['%d']
+        );
+    }
+
+    public function mark_failed( $id, $error_code = 'unknown_error' ) {
+        return $this->db->update(
+            $this->table,
+            [
+                'status'     => 'failed',
+                'error_code' => $error_code,
+                'updated_at' => current_time('mysql'),
+            ],
+            ['id' => (int) $id],
+            ['%s','%s','%s'],
+            ['%d']
+        );
+    }
+
+    /* ==== Reconciliation logic ========================================= */
+
+    /**
+     * Reconcile a single submission row object.
+     * Expected fields: id, original_url, job_id, status
+     */
+    public function reconcile_submission( $row ) {
+        if ( empty($row->original_url) ) return 'invalid_row';
+
+        // No job id? Try availability-only path.
+        if ( empty($row->job_id) ) {
+            $closest = $this->check_availability( $row->original_url );
+            if ( is_wp_error($closest) ) return 'availability_error';
+            if ( $closest && !empty($closest['available']) ) {
+                $this->mark_archived( $row->id, $closest['url'], $closest['timestamp'] );
+                return 'archived_via_availability';
+            }
+            return 'still_processing_or_missing';
+        }
+
+        // Poll job status
+        $status = $this->get_save_status( $row->job_id );
+        if ( is_wp_error($status) ) return 'status_check_error';
+
+        if ( $status['status'] === 'pending' ) return 'pending';
+
+        if ( $status['status'] === 'success' && !empty($status['timestamp']) ) {
+            $snapshot_url = sprintf(
+                'https://web.archive.org/web/%s/%s',
+                $status['timestamp'],
+                $status['original_url'] ?? $row->original_url
+            );
+
+            // Double-check availability
+            $closest = $this->check_availability( $row->original_url );
+            if ( is_wp_error($closest) ) {
+                // Soft-success with audit flag
+                $this->mark_archived( $row->id, $snapshot_url, $status['timestamp'], ['needs_audit' => 1] );
+                return 'archived_needs_audit_availability_error';
+            }
+
+            if ( $closest && !empty($closest['available']) ) {
+                // Optionally check HEAD:
+                $code = $this->head_snapshot( $snapshot_url );
+                if ( !is_wp_error($code) && (int)$code === 200 ) {
+                    $this->mark_archived( $row->id, $snapshot_url, $status['timestamp'] );
+                    return 'archived';
+                }
+                // Snapshot may be warming: mark archived but audit
+                $this->mark_archived( $row->id, $snapshot_url, $status['timestamp'], ['needs_audit' => 1] );
+                return 'archived_needs_audit_head_non200';
+            }
+
+            // Availability didn't confirm — soft mark with audit
+            $this->mark_archived( $row->id, $snapshot_url, $status['timestamp'], ['needs_audit' => 1] );
+            return 'archived_needs_audit';
+        }
+
+        if ( $status['status'] === 'error' ) {
+            $this->mark_failed( $row->id, $status['error'] ?? 'save_error' );
+            return 'failed';
+        }
+
+        return 'unexpected_state';
+    }
+
+    /* ==== Batch sweep for stuck jobs =================================== */
+
+    public function sweep_stuck_processing( $older_than_minutes = 15, $limit = 50 ) {
+        $table = $this->table;
+        $rows  = $this->db->get_results(
+            $this->db->prepare(
+                "SELECT * FROM $table
+                 WHERE status = %s
+                   AND submitted_at < (NOW() - INTERVAL %d MINUTE)
+                 ORDER BY submitted_at ASC
+                 LIMIT %d",
+                'processing', $older_than_minutes, $limit
+            )
+        );
+
+        $results = [];
+        if ( $rows ) {
+            foreach ( $rows as $row ) {
+                $results[$row->id] = $this->reconcile_submission( $row );
+            }
+        }
+        return $results;
+    }
+}
+
+------------------------------------------------------------------
+2) Wire up cron + activation/deactivation hooks
+------------------------------------------------------------------
+
+Edit (or create): `spun-web-archive-forge.php` (main plugin file)
+
+// ... plugin header ...
+
+if ( ! defined('ABSPATH') ) exit;
+
+require_once __DIR__ . '/includes/class-swap-archiver.php';
+
+// Register a 5-min schedule
+add_filter('cron_schedules', function($s){
+    if ( ! isset($s['every_five_minutes']) ) {
+        $s['every_five_minutes'] = ['interval' => 300, 'display' => 'Every 5 Minutes'];
+    }
+    return $s;
+});
+
+// On activation, schedule the validation cron
+register_activation_hook( __FILE__, function(){
+    if ( ! wp_next_scheduled('swap_validate_archives_cron') ) {
+        wp_schedule_event( time() + 60, 'every_five_minutes', 'swap_validate_archives_cron' );
+    }
+});
+
+// On deactivation, clear scheduled event
+register_deactivation_hook( __FILE__, function(){
+    $timestamp = wp_next_scheduled('swap_validate_archives_cron');
+    if ( $timestamp ) {
+        wp_unschedule_event( $timestamp, 'swap_validate_archives_cron' );
+    }
+});
+
+// Cron callback
+add_action('swap_validate_archives_cron', function(){
+    $archiver = new SWP_Archiver();
+    $archiver->sweep_stuck_processing( 15, 50 );
+});
+
+------------------------------------------------------------------
+3) Extend Admin UI: "Validate now" button
+------------------------------------------------------------------
+
+Edit (or create): `includes/class-admin-page.php`
+
+Add this method to your existing SWP_Admin_Page class:
+
+    public function __construct() {
+        // ... existing constructor code ...
+        
+        // AJAX handler for Validate now
+        add_action('wp_ajax_swap_validate_now', [ $this, 'ajax_validate_now' ]);
+    }
+
+    public function ajax_validate_now() {
+        check_ajax_referer('swap_validate_now');
+        if ( ! current_user_can('manage_options') ) {
+            wp_send_json_error(['error' => 'forbidden'], 403);
+        }
+        $archiver = new SWP_Archiver();
+        $result = $archiver->sweep_stuck_processing( 0, 100 ); // force sweep now (no age gate)
+        wp_send_json_success( $result );
+    }
+
+Add this to your queue management section in render_queue_settings():
+
+    <div class="swap-queue-actions">
+        <button type="button" id="process-queue-btn" class="button button-primary">
+            <?php _e('Process Queue', 'spun-web-archive-forge'); ?>
+        </button>
+        <button type="button" id="validate-archives-btn" class="button button-secondary">
+            <?php _e('Validate Archives', 'spun-web-archive-forge'); ?>
+        </button>
+        <button type="button" id="clear-completed-btn" class="button">
+            <?php _e('Clear Completed', 'spun-web-archive-forge'); ?>
+        </button>
+        <button type="button" id="clear-failed-btn" class="button">
+            <?php _e('Clear Failed', 'spun-web-archive-forge'); ?>
+        </button>
+        <button type="button" id="refresh-stats-btn" class="button">
+            <?php _e('Refresh Stats', 'spun-web-archive-forge'); ?>
+        </button>
+    </div>
+    
+    <div id="validation-results" class="notice" style="display: none; margin-top: 10px;"></div>
+
+Add this JavaScript to your admin.js file:
+
+    // Validate Archives button handler
+    $('#validate-archives-btn').on('click', function() {
+        var $btn = $(this);
+        var $results = $('#validation-results');
+        
+        $btn.prop('disabled', true).text('Validating...');
+        $results.hide();
+        
+        $.post(swapAdmin.ajaxUrl, {
+            action: 'swap_validate_now',
+            _ajax_nonce: swapAdmin.nonce
+        }).done(function(response) {
+            if (response.success && response.data) {
+                var results = response.data;
+                var summary = Object.keys(results).length + ' items processed';
+                var details = Object.entries(results).map(([id, status]) => 
+                    `ID ${id}: ${status}`
+                ).join('\n');
+                
+                $results.removeClass('notice-error notice-warning')
+                       .addClass('notice-success')
+                       .html(`<p><strong>Validation Complete:</strong> ${summary}</p><pre>${details}</pre>`)
+                       .show();
+            } else {
+                $results.removeClass('notice-success notice-warning')
+                       .addClass('notice-error')
+                       .html('<p>Validation failed or returned no data.</p>')
+                       .show();
+            }
+        }).fail(function() {
+            $results.removeClass('notice-success notice-warning')
+                   .addClass('notice-error')
+                   .html('<p>Validation request failed.</p>')
+                   .show();
+        }).always(function() {
+            $btn.prop('disabled', false).text('Validate Archives');
+        });
+    });
+
+------------------------------------------------------------------
+4) Where to store job_id and how to use extract_job_id()
+------------------------------------------------------------------
+
+Wherever you call Save Page Now to submit a URL for archiving (e.g., via wp_remote_post to https://web.archive.org/save ), capture the HTML response and immediately attempt to store the job id.
+
+Example (in your existing submit function):
+
+$submit_res = wp_remote_post('https://web.archive.org/save', [
+    'timeout' => 20,
+    'body'    => [
+        'url' => $original_url,
+    ],
+    'headers' => [
+        'Accept' => 'text/html,application/xhtml+xml',
+    ],
+]);
+
+if ( ! is_wp_error($submit_res) ) {
+    $html = wp_remote_retrieve_body( $submit_res );
+    $archiver = new SWP_Archiver();
+    $job_id = $archiver->extract_job_id( $html );
+
+    // Save into your submissions table:
+    $wpdb->update(
+        $wpdb->prefix . 'swap_submissions',
+        [
+            'job_id'      => $job_id,
+            'status'      => 'processing',
+            'updated_at'  => current_time('mysql'),
+        ],
+        ['id' => (int) $submission_id],
+        ['%s','%s','%s'],
+        ['%d']
+    );
+}
+
+------------------------------------------------------------------
+5) (Optional) Ensure table has expected columns
+------------------------------------------------------------------
+
+If you're missing any of the suggested columns, add a dbDelta on activation. Example (append to main plugin file's activation hook):
+
+global $wpdb;
+$table = $wpdb->prefix . 'swap_submissions';
+$charset = $wpdb->get_charset_collate();
+
+$sql = "CREATE TABLE {$table} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  original_url text NOT NULL,
+  job_id varchar(191) NULL,
+  status varchar(32) NOT NULL DEFAULT 'queued',
+  submitted_at datetime NULL,
+  snapshot_url text NULL,
+  snapshot_ts varchar(14) NULL,
+  error_code varchar(191) NULL,
+  needs_audit tinyint(1) NOT NULL DEFAULT 0,
+  updated_at datetime NULL,
+  PRIMARY KEY  (id),
+  KEY status_idx (status)
+) {$charset};";
+
+require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+dbDelta( $sql );
+
+------------------------------------------------------------------
+6) Testing checklist
+------------------------------------------------------------------
+
+[ ] Submit/queue a new URL; verify a row with status=processing and (ideally) a job_id.
+[ ] Use **Queue Management → Validate Archives** and watch the log results.
+[ ] Confirm the row transitions to archived (or failed) with snapshot_url and snapshot_ts populated.
+[ ] Open the snapshot_url; it should load and match the timestamp from /save/status.
+[ ] Let WP-Cron run for stuck items; verify they resolve automatically within minutes.
+[ ] If WP-Cron is disabled on your host, set a system cron to call wp-cron.php regularly.
+
+------------------------------------------------------------------
+7) Rollback
+------------------------------------------------------------------
+
+- Remove `includes/class-swap-archiver.php`.
+- In the main plugin file, remove:
+  - The `require_once` for `class-swap-archiver.php`
+  - The cron schedule filter
+  - The activation/deactivation hooks
+  - The `swap_validate_archives_cron` action
+- Remove the Validate Archives button and AJAX handler from admin page
+- Your data remains intact in `swap_submissions`.
+
+Notes
+-----
+- The Availability and Status endpoints are public; no auth is required.
+- If you hit remote rate limits, add jittered delays between polls, or batch your sweeps (the sweep already limits to 50/100).
+- This patch integrates seamlessly with your existing Archive Forge SWT v1.0.10 structure.
+
+End of file.

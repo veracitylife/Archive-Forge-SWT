@@ -109,7 +109,6 @@ class SWAP_Admin_Page {
         add_action('wp_ajax_swap_submit_single_post', [$this, 'ajax_submit_single_post']);
         add_action('wp_ajax_swap_get_submission_status', [$this, 'ajax_get_submission_status']);
         add_action('wp_ajax_swap_validate_now', [$this, 'ajax_validate_now']);
-        add_action('wp_ajax_swap_reset_stuck_items', [$this, 'ajax_reset_stuck_items']);
         
         // Admin enqueue scripts
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
@@ -187,8 +186,6 @@ class SWAP_Admin_Page {
         wp_localize_script('swap-admin-script', 'swapAdmin', [
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('swap_queue_management'),
-            'validateNonce' => wp_create_nonce('swap_validate_now'),
-            'resetNonce' => wp_create_nonce('swap_reset_stuck_items'),
             'strings' => [
                 'processing' => __('Processing...', 'spun-web-archive-forge'),
                 'success' => __('Operation completed successfully!', 'spun-web-archive-forge'),
@@ -1909,32 +1906,6 @@ class SWAP_Admin_Page {
             }
         } catch (Exception $e) {
             wp_send_json_error(['error' => 'Validation failed: ' . $e->getMessage()]);
-        }
-    }
-    
-    /**
-     * AJAX handler for resetting stuck processing items
-     *
-     * @since 2.0.0
-     * @return void
-     */
-    public function ajax_reset_stuck_items(): void {
-        check_ajax_referer('swap_reset_stuck_items', '_ajax_nonce');
-        
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(['error' => 'forbidden'], 403);
-        }
-        
-        try {
-            if (class_exists('SWP_Archiver')) {
-                $archiver = new SWP_Archiver();
-                $result = $archiver->reset_stuck_items( 60, 100 ); // Reset items stuck for 60+ minutes
-                wp_send_json_success( ['message' => "Reset {$result} stuck items to pending status"] );
-            } else {
-                wp_send_json_error(['error' => 'SWP_Archiver class not found']);
-            }
-        } catch (Exception $e) {
-            wp_send_json_error(['error' => 'Reset failed: ' . $e->getMessage()]);
         }
     }
 }
