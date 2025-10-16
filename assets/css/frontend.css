@@ -1,0 +1,410 @@
+/**
+ * Spun Web Archive Forge Frontend Styles
+ * Styles for widgets, shortcodes, and frontend elements
+ * 
+ * @package SpunWebArchiveElite
+ * @since 1.0.0
+ */
+
+/* ==========================================================================
+   Archive Widget Styles
+   ========================================================================== */
+
+.widget_swap_archive_widget {
+    margin-bottom: 20px;
+}
+
+.widget_swap_archive_widget .widget-title {
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+.swap-archive-link {
+    display: inline-block;
+    padding: 8px 12px;
+    background: #0073aa;
+    color: #fff !important;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: background-color 0.3s ease;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.swap-archive-link:hover,
+.swap-archive-link:focus {
+    background: #005a87;
+    color: #fff !important;
+    text-decoration: none;
+}
+
+.swap-archive-description {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #666;
+    line-height: 1.4;
+}
+
+/* Archive Links Widget */
+.widget_swap_archive_links_widget {
+    margin-bottom: 20px;
+}
+
+.swap-archive-links {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.swap-archive-links li {
+    margin-bottom: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.swap-archive-links li:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.swap-archive-link-item {
+    display: block;
+    text-decoration: none;
+    color: #0073aa;
+    transition: color 0.3s ease;
+}
+
+.swap-archive-link-item:hover,
+.swap-archive-link-item:focus {
+    color: #005a87;
+    text-decoration: underline;
+}
+
+.swap-archive-link-title {
+    font-weight: 500;
+    margin-bottom: 4px;
+    line-height: 1.3;
+}
+
+.swap-archive-link-meta {
+    font-size: 12px;
+    color: #666;
+    margin-top: 4px;
+}
+
+.swap-archive-link-date {
+    margin-right: 10px;
+}
+
+.swap-archive-link-status {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.swap-archive-link-status.archived {
+    background: #d4edda;
+    color: #155724;
+}
+
+.swap-archive-link-status.pending {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.swap-archive-link-status.failed {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+/* ==========================================================================
+   Shortcode Styles
+   ========================================================================== */
+
+/* Archive Link Shortcode */
+.swap-shortcode-archive-link {
+    display: inline-block;
+    padding: 6px 12px;
+    background: #0073aa;
+    color: #fff !important;
+    text-decoration: none;
+    border-radius: 3px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
+}
+
+.swap-shortcode-archive-link:hover,
+.swap-shortcode-archive-link:focus {
+    background: #005a87;
+    color: #fff !important;
+    text-decoration: none;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.swap-shortcode-archive-link.button-style {
+    padding: 10px 20px;
+    font-weight: 600;
+    border-radius: 5px;
+}
+
+.swap-shortcode-archive-link.text-style {
+    background: none;
+    color: #0073aa !important;
+    padding: 0;
+    text-decoration: underline;
+}
+
+.swap-shortcode-archive-link.text-style:hover {
+    background: none;
+    color: #005a87 !important;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Archive Status Shortcode */
+.swap-shortcode-status {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.swap-shortcode-status.archived {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.swap-shortcode-status.pending {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.swap-shortcode-status.failed {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.swap-shortcode-status.not-submitted {
+    background: #e2e3e5;
+    color: #383d41;
+    border: 1px solid #d6d8db;
+}
+
+/* Archive List Shortcode */
+.swap-shortcode-archive-list {
+    margin: 20px 0;
+}
+
+.swap-shortcode-archive-list ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.swap-shortcode-archive-list li {
+    margin-bottom: 12px;
+    padding: 12px;
+    background: #f9f9f9;
+    border-left: 4px solid #0073aa;
+    border-radius: 0 4px 4px 0;
+    transition: background-color 0.3s ease;
+}
+
+.swap-shortcode-archive-list li:hover {
+    background: #f0f0f0;
+}
+
+.swap-shortcode-archive-list .archive-item-title {
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.swap-shortcode-archive-list .archive-item-title a {
+    color: #0073aa;
+    text-decoration: none;
+}
+
+.swap-shortcode-archive-list .archive-item-title a:hover {
+    color: #005a87;
+    text-decoration: underline;
+}
+
+.swap-shortcode-archive-list .archive-item-meta {
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 8px;
+}
+
+.swap-shortcode-archive-list .archive-item-link {
+    display: inline-block;
+    padding: 4px 8px;
+    background: #0073aa;
+    color: #fff !important;
+    text-decoration: none;
+    border-radius: 3px;
+    font-size: 12px;
+    transition: background-color 0.3s ease;
+}
+
+.swap-shortcode-archive-list .archive-item-link:hover {
+    background: #005a87;
+    color: #fff !important;
+}
+
+/* Archive Count Shortcode */
+.swap-shortcode-count {
+    display: inline-block;
+    padding: 6px 12px;
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-weight: 600;
+    color: #333;
+}
+
+.swap-shortcode-count.highlight {
+    background: #0073aa;
+    color: #fff;
+    border-color: #005a87;
+}
+
+/* ==========================================================================
+   Error and Loading States
+   ========================================================================== */
+
+.swap-error-message {
+    padding: 10px;
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    margin: 10px 0;
+    font-size: 14px;
+}
+
+.swap-loading {
+    display: inline-block;
+    padding: 8px 12px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    color: #666;
+    font-style: italic;
+}
+
+.swap-loading::after {
+    content: "...";
+    animation: swap-loading-dots 1.5s infinite;
+}
+
+@keyframes swap-loading-dots {
+    0%, 20% { content: ""; }
+    40% { content: "."; }
+    60% { content: ".."; }
+    80%, 100% { content: "..."; }
+}
+
+/* ==========================================================================
+   Responsive Design
+   ========================================================================== */
+
+@media (max-width: 768px) {
+    .swap-archive-link,
+    .swap-shortcode-archive-link {
+        display: block;
+        text-align: center;
+        margin-bottom: 10px;
+    }
+    
+    .swap-shortcode-archive-list li {
+        padding: 8px;
+    }
+    
+    .swap-archive-link-meta {
+        display: block;
+    }
+    
+    .swap-archive-link-date {
+        margin-right: 0;
+        margin-bottom: 4px;
+        display: block;
+    }
+}
+
+/* ==========================================================================
+   Dark Mode Support
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+    .swap-shortcode-archive-list li {
+        background: #2c2c2c;
+        color: #e0e0e0;
+    }
+    
+    .swap-shortcode-archive-list li:hover {
+        background: #333;
+    }
+    
+    .swap-archive-description,
+    .swap-archive-link-meta {
+        color: #ccc;
+    }
+    
+    .swap-shortcode-count {
+        background: #333;
+        color: #e0e0e0;
+        border-color: #555;
+    }
+    
+    .swap-loading {
+        background: #333;
+        color: #ccc;
+    }
+}
+
+/* ==========================================================================
+   Accessibility
+   ========================================================================== */
+
+.swap-archive-link:focus,
+.swap-shortcode-archive-link:focus,
+.swap-archive-link-item:focus {
+    outline: 2px solid #005a87;
+    outline-offset: 2px;
+}
+
+/* Screen reader only text */
+.swap-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .swap-archive-link,
+    .swap-shortcode-archive-link {
+        border: 2px solid;
+    }
+    
+    .swap-archive-link-status,
+    .swap-shortcode-status {
+        border-width: 2px;
+    }
+}
